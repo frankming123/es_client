@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <!-- import CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <link rel="stylesheet" href="static/css/main.css">
+</head>
+
+<body>
+    <div id="app">
+        <el-container>
+            <el-header>
+                <el-form :inline="true" :model="es" class="demo-form-inline">
+                    <el-form-item label="时间：">
+                        <el-date-picker v-model="es.fromtotime" type="datetimerange" align="right"
+                            start-placeholder="开始日期" end-placeholder="结束日期" :default-time="['00:00:00', '23:59:59']">
+                        </el-date-picker>
+                    </el-form-item>
+                    <el-form-item label="appid：">
+                        <el-input v-model="es.appid" placeholder="appid" clearable></el-input>
+                    </el-form-item>
+                    <el-form-item label="clusterid：">
+                        <el-input v-model="es.clusterid" placeholder="clusterid" clearable></el-input>
+                    </el-form-item>
+                    <el-form-item label="kind：">
+                        <el-select v-model="es.kind" filterable placeholder="请选择">
+                            <el-option v-for="kind in kinds" :key="kind" :label="kind" :value="kind">
+                            </el-option>
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item label="namespace：">
+                        <el-input v-model="es.namespace" placeholder="namespace" clearable></el-input>
+                    </el-form-item>
+                    <el-form-item>
+                        <el-button type="primary" @click="onSubmit">查询</el-button>
+                    </el-form-item>
+                </el-form>
+            </el-header>
+            <el-main>
+                <el-table :data="tableData" :default-sort="{prop: 'lastSeenTime', order: 'descending'}">
+                    <el-table-column prop="lastSeenTime" label="时间" width='200' sortable>
+                    </el-table-column>
+                    <el-table-column prop="appId" label="appid" width='100'>
+                    </el-table-column>
+                    <el-table-column prop="clusterId" label="集群id" width='100' sortable>
+                    </el-table-column>
+                    <el-table-column prop="reason" label="reason" width='100' sortable>
+                    </el-table-column>
+                    <el-table-column prop="source" label="source" width='200' sortable>
+                    </el-table-column>
+                    <el-table-column prop="kind" label="kind" width='100' sortable>
+                    </el-table-column>
+                    <el-table-column prop="namespace" label="namespace" width='100' sortable>
+                    </el-table-column>
+                    <el-table-column prop="eventType" label="eventType" width='100' sortable>
+                    </el-table-column>
+                    <el-table-column prop="message" label="message">
+                    </el-table-column>
+                </el-table>
+            </el-main>
+            <el-footer>
+                <p>共{{ resCount }}项</p>
+            </el-footer>
+        </el-container>
+    </div>
+</body>
+<!-- import Vue before Element -->
+<script src="https://unpkg.com/vue/dist/vue.js"></script>
+<!-- import JavaScript -->
+<script src="https://unpkg.com/element-ui/lib/index.js"></script>
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+<script>
+    function pad(number) {
+        if (number < 10) {
+            return '0' + number;
+        }
+        return number;
+    };
+
+    Date.prototype.toISOString = function () {
+        return this.getFullYear() +
+            '-' + pad(this.getMonth() + 1) +
+            '-' + pad(this.getDate()) +
+            'T' + pad(this.getHours()) +
+            ':' + pad(this.getMinutes()) +
+            ':' + pad(this.getSeconds()) +
+            '.' + (this.getMilliseconds() / 1000).toFixed(3).slice(2, 5) +
+            '+08:00';
+    };
+
+    function before1Hour(date) {
+        res = new Date();
+        res.setTime(Date.parse(date) - 3600000);
+        return res;
+    }
+
+    var app = new Vue({
+        el: '#app',
+        data: {
+            es: {
+                appid: '',
+                clusterid: '',
+                kind: '',
+                namespace: '',
+                message: '',
+                source: '',
+                reason: '',
+                fromtotime: [before1Hour(new Date()), new Date()],
+            },
+            kinds: [
+                'Deployment',
+                'StatefulSet',
+                'DaemonSet',
+                'CronJob',
+                'Job',
+                'Pod',
+                'Service',
+                'Ingress',
+                'ReplicaSet',
+                'Master',
+                'Node',
+                'HorizontalPodAutoscaler',
+                'PersistentVolumeClaim',
+                '',
+            ],
+            tableData: [
+            ],
+            resCount: 0,
+            error: '',
+        },
+        methods: {
+            onSubmit() {
+                axios.post('http://127.0.0.1:8080', {
+                    'appid': this.es.appid,
+                    'clusterid': this.es.clusterid,
+                    'kind': this.es.kind,
+                    'namespace': this.es.namespace,
+                    'source': this.es.source,
+                    'reason': this.es.reason,
+                    'message': this.message,
+                    'fromtime': this.es.fromtotime[0].toISOString(),
+                    'totime': this.es.fromtotime[1].toISOString(),
+                }).then(res => {
+                    var tmp = res.data.hits.hits;
+                    this.resCount = tmp.length;
+                    this.tableData=[];
+                    for (var i = 0; i < tmp.length; i++) {
+                        tmp[i]._source.lastSeenTime = tmp[i]._source.lastSeenTime.substr(0, tmp[i]._source.lastSeenTime.indexOf('.'));
+                        this.tableData.push(tmp[i]._source);
+                    }
+                    return this.tableData;
+                }).catch(err => {
+                    //this.error = err;
+                    this.$notify.error({
+                        title: err.response.status,
+                        message: err.response.data,
+                    });
+                    console.error(err.response.data);
+                    return err;
+                })
+            }
+        }
+    })
+</script>
+
+</html>
